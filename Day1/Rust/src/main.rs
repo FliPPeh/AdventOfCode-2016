@@ -1,41 +1,23 @@
-use std::str::FromStr;
 use std::collections::HashSet;
 
-#[derive(Debug)]
-enum Instruction {
-    Left(i32),
-    Right(i32)
-}
+#[derive(Copy, Clone, Debug)]
+enum Turn { Left, Right }
 
-impl Instruction {
-    fn distance(self) -> i32 {
-        match self {
-            Instruction::Left(n) => n,
-            Instruction::Right(n) => n
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-enum Facing {
-    North,
-    South,
-    East,
-    West
-}
+#[derive(Copy, Clone, Debug)]
+enum Facing { North, South, East, West }
 
 impl Facing {
-    fn turn_left(self) -> Facing {
-        match self {
-            Facing::North => Facing::West,
-            Facing::South => Facing::East,
-            Facing::East => Facing::North,
-            Facing::West => Facing::South
-        }
-    }
+    fn turn(self, t: Turn) -> Facing {
+        match t {
+            Turn::Left => match self {
+                Facing::North => Facing::West,
+                Facing::South => Facing::East,
+                Facing::East => Facing::North,
+                Facing::West => Facing::South
+            },
 
-    fn turn_right(self) -> Facing {
-        self.turn_left().turn_left().turn_left()
+            Turn::Right => self.turn(Turn::Left).turn(Turn::Left).turn(Turn::Left)
+        }
     }
 }
 
@@ -57,68 +39,49 @@ impl Location {
     }
 }
 
-struct Person {
-    facing: Facing,
-    position: Location,
-    known_locations: HashSet<Location>
-}
-
-impl Person {
-    fn new() -> Person {
-        Person {
-            facing: Facing::North,
-            position: Location(0, 0),
-            known_locations: HashSet::new()
-        }
-    }
-
-    fn walk(&mut self, ins: Instruction) {
-        match ins {
-            Instruction::Left(_) => self.facing = self.facing.turn_left(),
-            Instruction::Right(_) => self.facing = self.facing.turn_right(),
-        }
-
-        for _ in 0..ins.distance() {
-            self.position = self.position.forward(self.facing, 1);
-
-            if self.known_locations.contains(&self.position) {
-                println!("I already know {:?}, it's {} from center!",
-                    self.position,
-                    self.position.distance_from(Location(0, 0)));
-            } else {
-                println!("Now at {:?}, {} from center",
-                    self.position,
-                    self.position.distance_from(Location(0, 0)));
-
-                self.known_locations.insert(self.position);
-            }
-        }
-    }
-
-    fn distance(&self) -> i32 {
-        self.position.distance_from(Location(0, 0))
-    }
-}
-
 fn main() {
     let mut line = String::new();
 
     std::io::stdin().read_line(&mut line).unwrap();
 
-    let mut me = Person::new();
+    let mut facing = Facing::North;
 
-    line.split(", ")
-        .map(|s| s.trim())
+    let path = line.split(", ")
         .map(|s| {
-            let (dir, n) = s.split_at(1);
-
-            match dir {
-                "L" => Instruction::Left(n.parse().unwrap()),
-                "R" => Instruction::Right(n.parse().unwrap()),
+            let (dir, n) = s.trim().split_at(1);
+            let turn = match dir {
+                "L" => Turn::Left,
+                "R" => Turn::Right,
                 _   => panic!("Oh god what did you do")
-            }
-        })
-        .fold((), |_, d| me.walk(d));
+            };
 
-    println!("{:?} @ {:?}", me.position, me.distance())
+            (turn, n.parse().unwrap())
+        })
+
+        .flat_map(|(turn, n)| {
+            facing = facing.turn(turn);
+
+            (0..n).map(move |_| (facing, 1))
+        })
+
+        .fold(vec![Location(0, 0)], |mut p, (f, d)| {
+            let next = p.last().unwrap().forward(f, d);
+            p.push(next);
+            p
+        });
+
+    println!("Part 1: {:}", path.last().unwrap().distance_from(Location(0, 0)));
+
+    // Find dups
+    let mut known = HashSet::new();
+
+    for node in path {
+        if known.contains(&node) {
+            println!("Part 2: {}", node.distance_from(Location(0, 0)));
+
+            break;
+        } else {
+            known.insert(node);
+        }
+    }
 }
