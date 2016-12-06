@@ -174,10 +174,12 @@ fn hack(base_pass: &str) -> () {
         }
 
         match p2_rx.try_recv() {
-            Ok((idx, pos, chr)) => if idx >= p2_idx && p2[pos] == '?' {
-                p2[pos] = chr;
-                p2_idx = idx;
-            },
+            Ok((idx, pos, chr)) =>
+                match p2[pos] {
+                    '?'               => { p2[pos] = chr; p2_idx = idx; }
+                    c if idx < p2_idx => { p2[pos] = chr; p2_idx = idx; }
+                    _                 => {}
+                },
 
             _ => {}
         }
