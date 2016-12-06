@@ -6,3 +6,6 @@ authors = ["Lukas Niederbremer <Lukas.Niederbremer@gmail.com>"]
 [dependencies]
 rust-crypto = '*'
 rand = '0.3'
+
+[features]
+multithread = []
