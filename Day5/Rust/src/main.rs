@@ -12,6 +12,9 @@ use std::thread;
 #[cfg(feature = "multithread")]
 use std::sync::{mpsc, Arc, Mutex};
 
+#[cfg(feature = "multithread")]
+use std::iter::repeat;
+
 use std::env::args;
 use std::io::{stdout, Write};
 
@@ -120,13 +123,13 @@ fn hack(base_pass: &str) -> () {
         let tx1 = p1_tx.clone();
         let tx2 = p2_tx.clone();
 
-        let tkill = kill.clone();
+        let kill_cln = kill.clone();
 
         workers.push(thread::spawn(move || {
             let mut digest = Md5::new();
 
             for j in (i..).step_by(NUMTHREADS) {
-                if *tkill.lock().unwrap() {
+                if *kill_cln.lock().unwrap() {
                     return;
                 }
 
@@ -136,9 +139,11 @@ fn hack(base_pass: &str) -> () {
                 let hash = digest.result_str();
 
                 if hash.chars().take(5).all(|c| c == '0') {
-                    tx1.send((j, hash.chars().nth(5).unwrap())).unwrap();
+                    let sixth = hash.chars().nth(5).unwrap();
 
-                    if let Some(pos) = hash.chars().nth(5).unwrap().to_digit(8) {
+                    tx1.send((j, sixth)).unwrap();
+
+                    if let Some(pos) = sixth.to_digit(8) {
                         let next = hash.chars().nth(6).unwrap();
 
                         tx2.send((j, pos as usize, next)).unwrap();
@@ -177,11 +182,10 @@ fn hack(base_pass: &str) -> () {
             _ => {}
         }
 
-        let p1_str = p1.chars().chain(std::iter::repeat('_')).take(PASSLEN).collect::<String>();
+        let p1_str = p1.chars().chain(repeat('_')).take(PASSLEN).collect::<String>();
         let p2_str = p2.iter().cloned().map(matrixify).collect::<String>();
 
-
-        if p1.len() >= PASSLEN && p2.iter().all(|c| *c != '?') {
+        if p1.len() >= PASSLEN && !p2.iter().any(|c| *c == '?') {
             println!("[ DONE! ]  {} - {}", p1_str, p2_str);
 
             *kill.lock().unwrap() = true;   
