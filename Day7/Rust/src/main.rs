@@ -42,11 +42,10 @@ fn main() {
     let pattern = Regex::new(r"(?P<supernet>[:alpha:]+)|(?:\[(?P<hypernet>[:alpha:]+)\])").unwrap();
 
     let addresses: Vec<_> = 
-        stdin
-            .lock()
-            .lines()
-            .map(std::io::Result::unwrap)
-            .map(|l| {
+        stdin.lock()
+             .lines()
+             .map(std::io::Result::unwrap)
+             .map(|l| {
                 let mut supernet = Vec::new();
                 let mut hypernet = Vec::new();
 
@@ -61,8 +60,8 @@ fn main() {
                 }
 
                 (supernet, hypernet)
-            })
-            .collect();
+             })
+             .collect();
 
     println!("transport-layer snooping: {}",
         &addresses
