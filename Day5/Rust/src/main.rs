@@ -177,7 +177,7 @@ fn hack(base_pass: &str) -> () {
             Ok((idx, pos, chr)) =>
                 match p2[pos] {
                     '?'               => { p2[pos] = chr; p2_idx = idx; }
-                    c if idx < p2_idx => { p2[pos] = chr; p2_idx = idx; }
+                    _ if idx < p2_idx => { p2[pos] = chr; p2_idx = idx; }
                     _                 => {}
                 },
 
