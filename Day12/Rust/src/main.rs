@@ -111,10 +111,29 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
+    /*
+     * Part 1
+     */
     let mut cpu = CPU::new();
     
     cpu.run_program(&prog);
 
+    println!("Part 1");
+    for (r, v) in [Register::A, Register::B, Register::C, Register::D].iter().zip(&cpu.registers) {
+        println!("{:?}: {:04}", r, v);
+    }
+
+    println!("");
+
+    /*
+     * Part 2
+     */
+    cpu = CPU::new();
+
+    cpu.registers[Register::C.as_index()] = 1;
+    cpu.run_program(&prog);
+
+    println!("Part 2");
     for (r, v) in [Register::A, Register::B, Register::C, Register::D].iter().zip(&cpu.registers) {
         println!("{:?}: {:04}", r, v);
     }
