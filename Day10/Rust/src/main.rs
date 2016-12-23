@@ -3,125 +3,115 @@ extern crate regex;
 use regex::Regex;
 
 use std::io::{BufRead, stdin};
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-enum TargetType {
-    Bot,
-    Output   
-}
-
-type TargetID = usize;
-type Target = (TargetType, TargetID);
+use std::collections::HashMap;
+use std::cmp::{min, max};
+use std::env::args;
 
 type Chip = i32;
 
-type Bot = (Option<Chip>, Option<Chip>);
-
-#[derive(Debug)]
-enum Instruction {
-    Input(Target, Chip),
-    Pass(Target, Target, Target)
+#[derive(Debug, Clone, Copy)]
+enum Target {
+    Bot(usize),
+    Output(usize)
 }
 
-static mut BOTS: [Bot; 256] = [(None, None); 256];
+#[derive(Debug, Copy, Clone)]
+struct Bot(Option<Chip>, Option<Chip>);
 
-fn put(bot: Bot, c: Chip) -> Bot {
-    match bot {
-        (None,        None)        => (Some(c), None),
-        (a @ Some(_), None)        => (a,       Some(c)),
-        (None,        b @ Some(_)) => (Some(c), b),
-        (a @ Some(_), b @ Some(_)) => (a,       b),
+impl Bot {
+    fn put(&mut self, c: Chip) {
+        *self = match *self {
+            Bot(None,        None)        => Bot(Some(c), None),
+            Bot(a @ Some(_), None)        => Bot(a,       Some(c)),
+            Bot(None,        b @ Some(_)) => Bot(Some(c), b),
+            Bot(a @ Some(_), b @ Some(_)) => Bot(a,       b),
+        }
+    }
+
+    fn full(&self) -> bool {
+        self.0.is_some() && self.1.is_some()
     }
 }
 
-fn is_full(bot: Bot) -> bool {
-    bot.0.is_some() && bot.1.is_some()
-}
+const NUMBOTS: usize = 256;
+const NUMOUTS: usize = 256;
 
 fn main() {
-    let stdin = stdin();
+    let a: Chip = args().nth(1).and_then(|s| s.parse().ok()).expect("invalid arguments");
+    let b: Chip = args().nth(2).and_then(|s| s.parse().ok()).expect("invalid arguments");
+
+    let mut bots = [(false, Bot(None, None)); NUMBOTS];
+    let mut outputs = [None; NUMOUTS];
+    let mut pairs = HashMap::<usize, (Target, Target)>::new();
 
     let match_input = Regex::new(r"^value (\d+) goes to bot (\d+)$").unwrap();
     let match_pass = Regex::new(r"^bot (\d+) gives low to (bot|output) (\d+) and high to (bot|output) (\d+)$").unwrap();
 
-    let instructions = stdin.lock()
-         .lines()
-         .map(std::io::Result::unwrap)
-         .map(|input| {
-            if let Some(cap) = match_input.captures(&input) {
-                return Instruction::Input(
-                    (TargetType::Bot, cap.at(2).unwrap().parse().unwrap()),
-                    cap.at(1).unwrap().parse().unwrap());
-            }
+    let stdin = stdin();
 
-            if let Some(cap) = match_pass.captures(&input) {
-                let t_lo = if cap.at(2).unwrap() == "bot" { TargetType::Bot } else { TargetType::Output };
-                let t_hi = if cap.at(4).unwrap() == "bot" { TargetType::Bot } else { TargetType::Output };
+    for line in stdin.lock().lines().map(std::io::Result::unwrap) {
+        if let Some(cap) = match_input.captures(&line) {
+            let i_self: usize = cap.at(2).unwrap().parse().unwrap();
+            let c: Chip = cap.at(1).unwrap().parse().unwrap();
 
-                return Instruction::Pass(
-                    (TargetType::Bot, cap.at(1).unwrap().parse().unwrap()),
-                    (t_lo, cap.at(3).unwrap().parse().unwrap()),
-                    (t_hi, cap.at(5).unwrap().parse().unwrap()));
-            }
+            bots[i_self].1.put(c);
+        }
 
-            panic!("invalid input");
-         })
-         .collect::<Vec<_>>();
+        if let Some(cap) = match_pass.captures(&line) {
+            let i_lo = cap.at(3).unwrap().parse().unwrap();
+            let i_hi = cap.at(5).unwrap().parse().unwrap();
 
-    /* Seed */
-    for instr in &instructions {
-        if let Instruction::Input((TargetType::Bot, n), c) = *instr {
-            unsafe {
-                BOTS[n] = put(BOTS[n], c);
-            }
+            let i_self = cap.at(1).unwrap().parse().unwrap();
+            let t_lo = if cap.at(2).unwrap() == "bot" {Target::Bot} else {Target::Output}(i_lo);
+            let t_hi = if cap.at(4).unwrap() == "bot" {Target::Bot} else {Target::Output}(i_hi);
+
+            pairs.entry(i_self).or_insert((t_lo, t_hi));
         }
     }
 
-    /* Distribute */
     loop {
-        let mut handovers = 0;
+        let mut happening = false;
 
-        for (i, _) in unsafe { BOTS.iter() }.enumerate() {
-            unsafe {
-                if let (Some(a), Some(b)) = BOTS[i] {
-                    for (hi, lo) in instructions
-                        .iter()
-                        .filter_map(|instr| match *instr {
-                            Instruction::Pass((TargetType::Bot, n), lo, hi) => if n == i {
-                                    Some((hi, lo))
-                                } else {
-                                    None
-                                },
+        for i in 0 .. bots.len() {
+            if bots[i].1.full() && !bots[i].0 {
+                let lo = min((bots[i].1).0.unwrap(), (bots[i].1).1.unwrap());
+                let hi = max((bots[i].1).0.unwrap(), (bots[i].1).1.unwrap());
 
-                            _ => None
-                        }) {
-
-                        if let (TargetType::Bot, lo) = lo {
-                            if !is_full(BOTS[lo]) {
-                                BOTS[lo] = put(BOTS[lo], if a < b { a } else { b });
-                                handovers += 1;
-                            }
-                        }
-
-                        if let (TargetType::Bot, hi) = hi {
-                            if !is_full(BOTS[hi]) {
-                                BOTS[hi] = put(BOTS[hi], if a < b { b } else { a });
-                                handovers += 1;
+                if let Some(&(lo_target, hi_target)) = pairs.get(&i) {
+                    macro_rules! put {
+                        ($target:expr, $val:expr) => {
+                            match $target {
+                                Target::Output(j) => outputs[j] = Some($val),
+                                Target::Bot(j) => (bots[j].1).put($val)
                             }
                         }
                     }
+
+                    put!(lo_target, lo);
+                    put!(hi_target, hi);
+
+                    bots[i].0 = true;
+                    happening = true;
                 }
             }
         }
 
-        if handovers == 0 {
+        if !happening {
             break;
         }
     }
 
-    for (i, bot) in unsafe { BOTS.iter() }.enumerate() {
-        if bot.0.is_some() && bot.1.is_some() {
-            println!("Bot {} <{} ! {}>", i, bot.0.unwrap(), bot.1.unwrap());
-        }
+    for (i, bot) in bots.iter().enumerate() {
+        println!("Bot {} <{} ! {}>", i, (bot.1).0.unwrap_or(-1), (bot.1).1.unwrap_or(-1));
     }
+
+    println!("Part 1: {:?}", bots
+                .iter()
+                .enumerate()
+                .filter(|&(_, &(_, Bot(ba, _ )))| ba.iter().any(|&ba| ba == a || ba == b))
+                .filter(|&(_, &(_, Bot(_,  bb)))| bb.iter().any(|&bb| bb == a || bb == b))
+                .nth(0)
+                .expect("I failed :(")
+                .0);
+    println!("Part 2: {}", (0..3).map(|i| outputs[i].unwrap()).product::<i32>());
 }
