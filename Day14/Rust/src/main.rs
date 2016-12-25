@@ -5,30 +5,64 @@ use crypto::digest::Digest;
 use crypto::md5::Md5;
 use std::env;
 
-fn is_key(input: &str, idx: i32, target: char) -> Option<(i32, String)> {
-    let mut digest = Md5::new();
+fn find<F>(hash: F)
+    where F: Fn(i32) -> String
+{
+    let mut keys = Vec::new();
+    let mut tbc: Vec<(i32, char)> = Vec::new();
 
-    for i in idx..idx+1000 {
-        digest.input_str(&input);
-        digest.input_str(&format!("{}", i));
-        
-        let result: Vec<_> = digest.result_str().chars().collect();
+    'outer: for i in 0.. {
+        let result_str = hash(i);
+        let result: Vec<_> = result_str.chars().collect();
 
+        // Check for trips
+        for j in 0..30 {
+            let target = result[j];
+
+            if (result[j + 1] == target) && (result[j + 2] == target) {
+                tbc.push((i, target));
+
+                break;
+            }
+        }
+
+        // Check for quads
         for j in 0..28 {
-            if (result[j] == target)
-                && (result[j + 1] == target)
+            let target = result[j];
+
+            if (result[j + 1] == target)
                 && (result[j + 2] == target)
                 && (result[j + 3] == target)
                 && (result[j + 4] == target)
             {
-                return Some((i, digest.result_str()));
+                for &(ti, t) in tbc.iter().filter(|&&(ti, t)|
+                        (t == target)
+                            && i <= (ti + 1000)
+                            && ti < i)
+                {
+                    // Don't double confirm
+                    if keys.iter().find(|&&ti2| ti2 == ti).is_some() {
+                        continue;
+                    }
+
+                    println!("{} -> {} <=> {} <- {}!", ti, hash(ti), result_str, i);
+
+                    keys.push(ti);
+
+                    if keys.len() == 64 {
+                        break 'outer;
+                    }
+                }
+
+                // Prune a bit, so memory doesn't explode
+                tbc.retain(|&(ti, _)|
+                    keys.iter().find(|&&ti2| ti2 == ti).is_none() && ((ti + 1000) > i));
             }
         }
-
-        digest.reset();
     }
 
-    None
+    keys.sort();
+    println!("{:?}", keys);
 }
 
 fn main() {
@@ -39,34 +73,30 @@ fn main() {
         return;
     };
 
-    let mut digest = Md5::new();
-    let mut keys = Vec::new();
+    println!("Part 1");
+    find(|idx| {
+        let mut digest = Md5::new();
 
-    'outer: for i in 0.. {
         digest.input_str(&input);
-        digest.input_str(&format!("{}", i));
+        digest.input_str(&format!("{}", idx));
 
-        let result: Vec<_> = digest.result_str().chars().collect();
+        digest.result_str()
+    });
 
-        'inner: for j in 0..30 {
-            let target = result[j];
+    println!("Part 2");
+    find(|idx| {
+        let mut digest = Md5::new();
+        let mut res = format!("{}{}", input, idx);
 
-            if (result[j + 1] == target) && (result[j + 2] == target) {
-                if let Some((ii, s)) = is_key(&input, i+1, target) {
-                    println!("{} -> {} <=> {} <- {}!", i, digest.result_str(), s, ii);
-                    keys.push(i);
+        for _ in 0..2017 {
+            digest.input_str(&res);
 
-                    if keys.len() == 64 {
-                        break 'outer;
-                    }
-                }
-
-                break 'inner;
-            }
+            res = digest.result_str();
+            digest.reset();
         }
 
-        digest.reset();
-    }
+        res
+    });
 
     //println!("Keys: {:?}", keys);
 }
